@@ -9,16 +9,12 @@ from hphbiome import (
 )
 
 
-def make_record(
-    record_id: str,
-    *,
-    references: list[str] | None = None,
-) -> CuratedKnowledgeRecord:
+def make_record(record_id: str) -> CuratedKnowledgeRecord:
     return CuratedKnowledgeRecord(
         id=record_id,
         title=f'Fictional title for {record_id}',
         synthesis=f'Fictional synthesis for {record_id}.',
-        references=[] if references is None else references,
+        references=[],
         review_status='fictional-review-state',
     )
 
@@ -214,98 +210,3 @@ def test_collection_rejects_duplicate_canonical_urls() -> None:
         ),
     ):
         KnowledgeCollection(references=[first, second])
-
-
-def test_collection_resolves_identifier_and_url_in_declared_order() -> None:
-    identifier = 'fictional-id:alpha-001'
-    canonical_url = 'https://example.test/sources/beta-002'
-    identifier_reference = make_reference('identifier', identifier=identifier)
-    url_reference = make_reference('URL', canonical_url=canonical_url)
-    record = make_record(
-        'fictional-record-1',
-        references=[canonical_url, identifier],
-    )
-    collection = KnowledgeCollection(
-        records=[record],
-        references=[identifier_reference, url_reference],
-    )
-
-    assert collection.resolve_references(record.id) == (
-        url_reference,
-        identifier_reference,
-    )
-
-
-def test_collection_allows_shared_and_empty_record_references() -> None:
-    shared_identifier = 'fictional-id:shared'
-    shared_reference = make_reference('shared', identifier=shared_identifier)
-    first_record = make_record(
-        'fictional-record-1', references=[shared_identifier]
-    )
-    second_record = make_record(
-        'fictional-record-2', references=[shared_identifier]
-    )
-    empty_record = make_record('fictional-record-empty')
-    collection = KnowledgeCollection(
-        records=[first_record, second_record, empty_record],
-        references=[shared_reference],
-    )
-
-    assert collection.resolve_references(first_record.id) == (
-        shared_reference,
-    )
-    assert collection.resolve_references(second_record.id) == (
-        shared_reference,
-    )
-    assert collection.resolve_references(empty_record.id) == ()
-
-
-@pytest.mark.parametrize(
-    'reference_value',
-    [
-        'fictional-id:missing',
-        'https://example.test/sources/missing',
-    ],
-    ids=['identifier', 'canonical-url'],
-)
-def test_collection_rejects_unresolved_record_references(
-    reference_value: str,
-) -> None:
-    record = make_record('fictional-record-1', references=[reference_value])
-
-    with pytest.raises(
-        ValueError,
-        match=(
-            r"^record 'fictional-record-1' contains unresolved scientific "
-            rf'reference {reference_value!r}$'
-        ),
-    ):
-        KnowledgeCollection(records=[record])
-
-
-def test_collection_rejects_ambiguous_cross_field_alias() -> None:
-    shared_alias = 'https://example.test/sources/shared'
-    identifier_reference = make_reference(
-        'identifier', identifier=shared_alias
-    )
-    url_reference = make_reference('URL', canonical_url=shared_alias)
-
-    with pytest.raises(
-        ValueError,
-        match=(
-            r"^reference alias 'https://example\.test/sources/shared' is "
-            r'ambiguous between references\[0\]\.identifier and '
-            r'references\[1\]\.canonical_url$'
-        ),
-    ):
-        KnowledgeCollection(references=[identifier_reference, url_reference])
-
-
-def test_resolve_references_rejects_unknown_record() -> None:
-    collection = KnowledgeCollection()
-
-    with pytest.raises(
-        KeyError,
-        match=r'^"record not found: \'missing-record\'"$',
-    ):
-        collection.resolve_references('missing-record')

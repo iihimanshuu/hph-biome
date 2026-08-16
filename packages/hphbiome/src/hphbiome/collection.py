@@ -85,48 +85,6 @@ def _validate_unique_reference_aliases(
             canonical_urls[reference.canonical_url] = index
 
 
-def _build_reference_alias_index(
-    references: tuple[ScientificReference, ...],
-) -> dict[str, ScientificReference]:
-    aliases: dict[str, ScientificReference] = {}
-    alias_locations: dict[str, str] = {}
-
-    for index, reference in enumerate(references):
-        reference_aliases = (
-            ('identifier', reference.identifier),
-            ('canonical_url', reference.canonical_url),
-        )
-        for field_name, alias in reference_aliases:
-            if alias is None:
-                continue
-
-            existing = aliases.get(alias)
-            if existing is not None and existing is not reference:
-                raise ValueError(
-                    f'reference alias {alias!r} is ambiguous between '
-                    f'{alias_locations[alias]} and '
-                    f'references[{index}].{field_name}'
-                )
-
-            aliases[alias] = reference
-            alias_locations[alias] = f'references[{index}].{field_name}'
-
-    return aliases
-
-
-def _validate_record_references(
-    records: tuple[CuratedKnowledgeRecord, ...],
-    aliases: dict[str, ScientificReference],
-) -> None:
-    for record in records:
-        for reference_value in record.references:
-            if reference_value not in aliases:
-                raise ValueError(
-                    f'record {record.id!r} contains unresolved scientific '
-                    f'reference {reference_value!r}'
-                )
-
-
 @dataclass(frozen=True)
 class KnowledgeCollection:
     """An immutable ordered collection of curated knowledge and references."""
@@ -140,8 +98,6 @@ class KnowledgeCollection:
 
         _validate_unique_record_ids(records)
         _validate_unique_reference_aliases(references)
-        aliases = _build_reference_alias_index(references)
-        _validate_record_references(records, aliases)
 
         object.__setattr__(self, 'records', records)
         object.__setattr__(self, 'references', references)
@@ -180,14 +136,3 @@ class KnowledgeCollection:
             ),
             None,
         )
-
-    def resolve_references(
-        self, record_id: str
-    ) -> tuple[ScientificReference, ...]:
-        """Return a record's references in their declared order."""
-        record = self.get_record(record_id)
-        if record is None:
-            raise KeyError(f'record not found: {record_id!r}')
-
-        aliases = _build_reference_alias_index(tuple(self.references))
-        return tuple(aliases[value] for value in record.references)
